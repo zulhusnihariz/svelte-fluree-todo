@@ -3,30 +3,23 @@
 
 <script lang="ts">
 	import FlurreContext from './contexts/FlureeContext.svelte';
-	import Todo from './lib/Todo.svelte';
+	import MainPage from './lib/MainPage.svelte';
 	import { Tab, currentTab } from './stores/fluree.store';
 </script>
 
 <main style="display: relative;">
 	<div style="position: absolute; top: 30px; left: 0; right: 0;">
 		<h1>Fluree Demo</h1>
-		<div>
+		<div style="margin-top:30px;">
 			<button
-				style="margin-top:10px"
 				on:click|preventDefault={() => currentTab.set(Tab.COLLECTION_PREDICATE)}
 			>
 				Collection & Predicate
 			</button>
-			<button
-				style="margin-top:10px"
-				on:click|preventDefault={() => currentTab.set(Tab.ASSIGNEE)}
-			>
+			<button on:click|preventDefault={() => currentTab.set(Tab.ASSIGNEE)}>
 				Assignee
 			</button>
-			<button
-				style="margin-top:10px"
-				on:click|preventDefault={() => currentTab.set(Tab.TODO)}
-			>
+			<button on:click|preventDefault={() => currentTab.set(Tab.TODO)}>
 				Todo
 			</button>
 		</div>
@@ -34,7 +27,7 @@
 
 	<div class="card">
 		<FlurreContext>
-			<Todo />
+			<MainPage />
 		</FlurreContext>
 	</div>
 </main>

@@ -3,23 +3,41 @@
 		FLUREE = 'context_fluree',
 	}
 
-	export type FlureeContext = {
-		fetchSchema: () => void;
-		formatQuery: (args: any) => any;
-		formatDelete: (args: { data: any; deleteAll?: boolean }) => any;
-		formatUpdate: (args: { data: any }) => any;
-		transact: (data: any) => Promise<any>;
-		query: (data: any) => Promise<any>;
-		multiQuery: (data: any) => Promise<any>;
+	export type TransactResolve = {
+		tempids: { [key: string]: number };
+		block: number;
+		hash: string;
+		instant: number;
+		type: string;
+		duration: string;
+		fuel: number;
+		auth: string;
+		status: number;
+		id: string;
+		bytes: string;
+		flakes: any;
 	};
 
-	export type FlureeQuery = {
-		select: any[];
-		from: string;
-		opts: {
-			compact: boolean;
-			orderBy: string[];
-		};
+	export type TransactReject = {
+		status: number;
+		error: string;
+		message: string;
+	};
+
+	type FormatQuery = <A, R>(args: A) => R;
+	type TransactType = (args: any) => Promise<TransactResolve>;
+
+	export type FlureeContext = {
+		fetchSchema: () => void;
+		formatQuery: FormatQuery;
+		formatDelete: <R>(args: {
+			data: any;
+			deleteAll?: boolean;
+		}) => { _id: number; action: 'delete' } & R;
+		formatUpdate: <R>(args: {
+			data: any;
+		}) => { _id: number; action: 'update' } & R;
+		transact: TransactType;
 	};
 </script>
 
@@ -34,6 +52,7 @@
 		type Todo,
 		type Assignee,
 		todos,
+		type TodoTask,
 	} from '../stores/fluree.store';
 
 	const headers = {
@@ -49,9 +68,14 @@
 		return `${BASE_URL}/fdb/${ACCOUNT}/${DBNAME}/${action}`;
 	}
 
+	interface FlureeQuery {
+		select: ({ [key: string]: any } | string)[];
+		from: string;
+	}
+
 	setContext(ContextName.FLUREE, {
 		fetchSchema: async function () {
-			let query = {
+			let query: { [key: string]: FlureeQuery } = {
 				collections: {
 					select: ['*', { '_collection/spec': ['*'] }],
 					from: '_collection',
@@ -70,22 +94,32 @@
 				},
 			};
 
-			const result: {
+			const result = await MultiQuery<{
 				collections: Collection[];
 				predicates: Predicate[];
 				assignees: Assignee[];
-				todos: Todo[];
-			} = await MultiQuery(query as any);
+				todos: Todo<TodoTask>[];
+			}>(query);
 
 			collections.set(result.collections);
 			predicates.set(result.predicates);
 			assignees.set(result.assignees);
 			todos.set(result.todos);
 		},
-		formatQuery: function (arg: any) {
-			return formatFlureeDataStructure(arg);
+		formatQuery: function <A, R>(arg: A) {
+			return formatFlureeDataStructure(arg) as R;
 		},
-		formatUpdate: function ({ data }) {},
+		formatUpdate: function ({ data }) {
+			let { _id, collection, ...rest } = data;
+
+			let keys = Object.keys(rest);
+			let transformed = keys.reduce((acc, key) => {
+				acc[`${collection}/${key}`] = data[key];
+				return acc;
+			}, {});
+
+			return { _id, _action: 'update', ...transformed };
+		},
 		formatDelete: function ({ data, deleteAll = false }) {
 			if (deleteAll) {
 				return { _id: data._id, _action: 'delete' };
@@ -102,14 +136,8 @@
 			return { _id, _action: 'delete', ...transformed };
 		},
 
-		transact: async function (flureeQuery: any) {
-			return await Transact(flureeQuery);
-		},
-		query: async function (flureeQuery: any) {
-			return await Query(flureeQuery);
-		},
-		multiQuery: async function (flureeQuery: any) {
-			return await MultiQuery(flureeQuery);
+		transact: async function <R>(flureeQuery: any) {
+			return (await Transact(flureeQuery)) as R;
 		},
 	});
 
@@ -121,11 +149,10 @@
 		return typeof value === 'object' && !Array.isArray(value);
 	}
 
-	function formatFlureeDataStructure(arg: any) {
+	function formatFlureeDataStructure(arg: any[] | { [key: string]: any }) {
 		const isArgTypeArray = isArray(arg);
 		const isArgTypeObject = isObject(arg);
 
-		// console.log(arg);
 		let temp = {};
 
 		if (isArgTypeArray) {
@@ -169,8 +196,12 @@
 			headers,
 			body: JSON.stringify(body),
 		});
+		let response = await data.json();
 
-		return await data.json();
+		if (response.status === 200) return response;
+
+		let e = response as unknown as TransactReject;
+		throw new Error(`${e.error}: ${e.message}`);
 	}
 
 	async function Query(body: FlureeQuery) {
@@ -186,7 +217,7 @@
 		return await data.json();
 	}
 
-	async function MultiQuery(body: FlureeQuery) {
+	async function MultiQuery<T>(body: { [key: string]: FlureeQuery }) {
 		if (typeof API_KEY != 'undefined') {
 			headers['Authorization'] = `Bearer ${API_KEY}`;
 		}
@@ -197,7 +228,7 @@
 			body: JSON.stringify(body),
 		});
 
-		return await data.json();
+		return (await data.json()) as T;
 	}
 </script>
 

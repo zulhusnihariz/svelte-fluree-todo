@@ -43,53 +43,30 @@ export type Predicate = {
 	'_predicate/retractDuplicates'?: boolean;
 };
 
-export type Assignee = {
-	_id: string;
-	name: string;
-	email: string;
-	todos?: any[];
-};
-
 export interface FormattedFluree {
 	collection?: string;
 }
 
-export type TodoTask = {
-	_id?: string;
-	collection?: string;
+export interface Assignee extends FormattedFluree {
+	_id: string;
+	name: string;
+	email: string;
+	todos?: string[];
+}
+
+export interface TodoTask extends FormattedFluree {
+	_id: string;
 	name: string;
 	isCompleted: boolean;
-	assignee: {
-		_id: string;
-		email: string;
-		todos: string[];
-		collection?: string;
-	};
-};
+	assignee: Assignee;
+}
 
-export type FlureeTodoTask = {
-	_id?: string;
-	collection?: string;
-	name: string;
-	isCompleted: boolean;
-	assignee: string | number; // _id
-};
-
-export type FlureeTodo = {
-	_id?: string;
-	collection?: string;
+export interface Todo<T> extends FormattedFluree {
+	_id: string;
 	name: string;
 	description: string;
-	tasks: string | number[];
-};
-
-export type Todo = {
-	_id?: string;
-	collection?: string;
-	name: string;
-	description: string;
-	tasks?: TodoTask[];
-};
+	tasks: T[];
+}
 
 export enum Tab {
 	COLLECTION_PREDICATE = 'tab_collection_predicate',
@@ -100,5 +77,5 @@ export enum Tab {
 export const collections = writable<Collection[]>([]);
 export const predicates = writable<Predicate[]>([]);
 export const assignees = writable<Assignee[]>([]);
-export const todos = writable<Todo[]>([]);
+export const todos = writable<Todo<TodoTask>[]>([]);
 export const currentTab = writable<Tab>(Tab.COLLECTION_PREDICATE);

@@ -8,7 +8,6 @@
 		type TodoTask,
 		Tab,
 		currentTab,
-		type FlureeTodo,
 	} from '../stores/fluree.store';
 	import { getContext, onMount } from 'svelte';
 	import {
@@ -19,6 +18,7 @@
 	let {
 		fetchSchema,
 		formatQuery,
+		formatUpdate: formatFlureeUpdate,
 		formatDelete: formatFlureeDelete,
 		transact,
 	} = getContext<FlureeContext>(ContextName.FLUREE);
@@ -59,7 +59,7 @@
 		email: '',
 	};
 
-	let todo: Omit<Todo, 'tasks'> & { tasks: string[] } = {
+	let todo: Todo<string> = {
 		_id: 'todo$first', // temporary id
 		name: '', // temporary id
 		description: '',
@@ -70,7 +70,7 @@
 	let tables = {};
 	let formatted = [];
 
-	let currentTask: Todo & { collection?: string } = {
+	let currentTask: Todo<TodoTask> = {
 		_id: '',
 		collection: '',
 		name: '',
@@ -78,9 +78,9 @@
 		tasks: [],
 	};
 
-	let toBeUpdated = [];
-	let toBeDeleted = [];
-	let toBeCreated = [];
+	let toBeUpdated: { [key: string]: any }[] = [];
+	let toBeDeleted: { [key: string]: any }[] = [];
+	let toBeCreated: { [key: string]: any }[] = [];
 
 	onMount(async () => {
 		await fetchSchema();
@@ -126,7 +126,6 @@
 		});
 
 		Object.assign(currentTask, formatted[0]);
-		console.log(currentTask);
 	});
 
 	function consoleChanges() {
@@ -136,28 +135,30 @@
 		console.log('update', Object.values(toBeUpdated));
 	}
 
-	function handleSubmit() {
-		// console.log(todo, tasks);
-		transact([todo, ...tasks]);
+	async function handleSubmit() {
+		await transact([todo, ...tasks]);
 	}
 
-	function handleUpdate() {
-		consoleChanges();
-		transact([...toBeCreated, ...Object.values(toBeUpdated), ...toBeDeleted]);
+	async function handleUpdate() {
+		await transact([
+			...toBeCreated,
+			...Object.values(toBeUpdated),
+			...toBeDeleted,
+		]);
 	}
 
-	function handleCreateAssignee() {
+	async function handleCreateAssignee() {
 		alert(JSON.stringify(assignee, null, 2));
-		transact([assignee]);
+		await transact([assignee]);
 	}
 
 	async function handleAddCollection() {
-		let response = await transact([collectionInput]);
-		if (response?.error) {
-			alert(`${response.error}- ${response.message}`);
-			return;
+		try {
+			await transact([collectionInput]);
+			alert('success');
+		} catch (e) {
+			alert(e.message);
 		}
-		alert('success');
 	}
 
 	async function handleAddPredicate() {
@@ -171,12 +172,12 @@
 				delete input[el];
 		});
 
-		let response = await transact([input]);
-		if (response?.error) {
-			alert(`${response.error}- ${response.message}`);
-			return;
+		try {
+			await transact([input]);
+			alert('success');
+		} catch (e) {
+			alert(e.message);
 		}
-		alert('success');
 	}
 
 	function addTask(index: number, mode: 'create' | 'update' = 'create') {
@@ -187,6 +188,7 @@
 				isCompleted: false,
 				assignee: {
 					_id: `assignee$assignee${index}`,
+					name: '',
 					email: '',
 					todos: ['todo$first'],
 				},
@@ -206,6 +208,7 @@
 				isCompleted: false,
 				assignee: {
 					_id: `assignee$assignee${index}`,
+					name: '',
 					email: '',
 					todos: [currentTask._id],
 				},
@@ -216,13 +219,12 @@
 			toBeCreated.push(task);
 			toBeCreated = toBeCreated;
 
-			if (!toBeUpdated[currentTask._id])
-				toBeUpdated[currentTask._id] = {
-					_id: currentTask._id,
-					tasks: [],
-					_action: 'update',
-				};
-
+			if (!toBeUpdated[currentTask._id]) {
+				let data = { _id: currentTask._id, collection: 'todo', tasks: [] };
+				toBeUpdated[currentTask._id] = <{ tasks: string[] }>formatFlureeUpdate({
+					data,
+				});
+			}
 			toBeUpdated[currentTask._id].tasks.push(taskId);
 		}
 
@@ -245,7 +247,10 @@
 
 				toBeUpdated[currentTask._id].tasks.splice(idx, 1);
 			} else {
-				let deleteData = formatFlureeDelete({ data: target, deleteAll: true });
+				let deleteData = formatFlureeDelete<typeof target>({
+					data: target,
+					deleteAll: true,
+				});
 				toBeDeleted.push(deleteData);
 			}
 
@@ -260,8 +265,6 @@
 		// need to handle different input type
 		let { _id, collection, predicate } = JSON.parse(e.target.dataset.fluree);
 
-		console.log(_id, collection, e.target.value);
-
 		if (!collection) return;
 		let value = e.target.value;
 
@@ -270,8 +273,6 @@
 		if (e.target.type === 'checkbox') value = e.target.checked;
 
 		if (!isNaN(parseInt(value))) value = parseInt(value);
-
-		console.log(`${collection}/${predicate}`, value);
 
 		toBeUpdated[_id][`${collection}/${predicate}`] = value;
 	}
